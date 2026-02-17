@@ -1,0 +1,14 @@
+{
+  "name": "aeromaintain-pro-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "ci": "powershell -ExecutionPolicy Bypass -File .\\ci.ps1",
+    "ci:server": "cd server && npm run ci -s",
+    "ci:client": "cd client && npm run ci -s"
+  }
+}

@@ -1,0 +1,5 @@
+#!/bin/sh
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT" || exit 1
+echo "Running local CI before push..."
+npm run ci -s || exit 1

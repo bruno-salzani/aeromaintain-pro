@@ -1,0 +1,7 @@
+{
+  "name": "AeroMaintain Pro",
+  "description": "A comprehensive aircraft maintenance and flight log manager designed for Brazilian aviation standards, featuring real-time tracking, compliance alerts, and digital signatures.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
