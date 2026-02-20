@@ -6,7 +6,7 @@
 
 ---
 
-## 🚀 Destaques Técnicos (Para Recrutadores)
+## 🚀 Destaques Técnicos
 
 Este projeto demonstra competências avançadas em desenvolvimento de software, ideal para avaliar habilidades em cenários do mundo real:
 
