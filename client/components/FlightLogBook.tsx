@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { FlightLog, Aircraft, Volume, Aeronauta } from '../types';
 import { apiPost, apiDelete, apiPut } from '@/services/api';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
+import { useForm } from 'react-hook-form';
 const track = (event: string, payload: any = {}) => {
   const reqId = Math.random().toString(36).slice(2);
   console.log(JSON.stringify({ ts: new Date().toISOString(), event, reqId, ua: navigator.userAgent, payload }));
@@ -24,6 +25,27 @@ interface Props {
   onAddLog: (log: Omit<FlightLog, 'id'>) => void;
   onDeleteLog: (id: string) => void;
 }
+
+type FormValues = {
+  naturezaVoo: string;
+  siglaAerodromoDecolagem: string;
+  latitudeDecolagem: string;
+  longitudeDecolagem: string;
+  localDecolagem: string;
+  siglaAerodromoPouso: string;
+  latitudePouso: string;
+  longitudePouso: string;
+  localPouso: string;
+  horarioPartida: string;
+  horarioDecolagem: string;
+  horarioPouso: string;
+  horarioCorteMotores: string;
+  quantidadePessoasVoo: number;
+  totalCombustivel: number;
+  unidadeCombustivel: 'L' | 'KG';
+  numeroPousoEtapa: number;
+  numeroCicloEtapa: number;
+};
 
 const FUNCOES_ANAC = [
   { id: '1', label: 'Piloto em comando (P1)' },
@@ -74,15 +96,29 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
     { aeronautaBrasileiro: true, numeroDocumento: '', funcao: '1', nome: '' }
   ]);
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { register, handleSubmit, getValues, setValue, clearErrors, setError: setFormError, watch, formState: { errors: formErrors } } = useForm<FormValues>({
+    defaultValues: {
+      naturezaVoo: '6',
+      siglaAerodromoDecolagem: '',
+      latitudeDecolagem: '',
+      longitudeDecolagem: '',
+      localDecolagem: '',
+      siglaAerodromoPouso: '',
+      latitudePouso: '',
+      longitudePouso: '',
+      localPouso: '',
+      horarioPartida: '',
+      horarioDecolagem: '',
+      horarioPouso: '',
+      horarioCorteMotores: '',
+      quantidadePessoasVoo: 1,
+      totalCombustivel: 0,
+      unidadeCombustivel: 'L',
+      numeroPousoEtapa: 1,
+      numeroCicloEtapa: 1
+    }
+  });
 
-  const setError = (field: string, message: string) => {
-    setErrors(prev => {
-      const next = { ...prev };
-      if (message) next[field] = message; else delete next[field];
-      return next;
-    });
-  };
   const [form, setForm] = useState<{
     naturezaVoo: string;
     siglaAerodromoDecolagem: string;
@@ -124,34 +160,34 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
   });
 
   const validateIcao = (field: 'siglaAerodromoDecolagem' | 'siglaAerodromoPouso', value: string) => {
-    if (!value) return setError(field, '');
+    if (!value) { clearErrors(field); return; }
     const ok = /^[A-Z]{4}$/.test(value);
-    setError(field, ok ? '' : 'ICAO inválido (4 letras A–Z)');
+    if (!ok) setFormError(field, { type: 'manual', message: 'ICAO inválido (4 letras A–Z)' }); else clearErrors(field);
   };
 
   const validateCoord = (field: 'latitudeDecolagem' | 'longitudeDecolagem' | 'latitudePouso' | 'longitudePouso', value: string) => {
-    if (!value) return setError(field, '');
+    if (!value) { clearErrors(field); return; }
     const num = Number(value);
     const isLat = field.includes('latitude');
     const ok = Number.isFinite(num) && (isLat ? num >= -90 && num <= 90 : num >= -180 && num <= 180);
-    setError(field, ok ? '' : isLat ? 'Latitude deve estar entre -90 e 90' : 'Longitude deve estar entre -180 e 180');
+    if (!ok) setFormError(field, { type: 'manual', message: isLat ? 'Latitude deve estar entre -90 e 90' : 'Longitude deve estar entre -180 e 180' }); else clearErrors(field);
   };
 
   const validateDateTime = (field: 'horarioPartida' | 'horarioDecolagem' | 'horarioPouso' | 'horarioCorteMotores', value: string) => {
-    if (!value) return setError(field, '');
+    if (!value) { clearErrors(field); return; }
     const ok = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value);
-    setError(field, ok ? '' : 'Formato inválido, use YYYY-MM-DDTHH:MM');
+    if (!ok) setFormError(field, { type: 'manual', message: 'Formato inválido, use YYYY-MM-DDTHH:MM' }); else clearErrors(field);
     validateOrder();
   };
 
   const validatePositive = (field: 'quantidadePessoasVoo', value: number) => {
     const ok = Number.isFinite(value) && value >= 1;
-    setError(field, ok ? '' : 'Deve ser pelo menos 1');
+    if (!ok) setFormError(field, { type: 'manual', message: 'Deve ser pelo menos 1' }); else clearErrors(field);
   };
 
   const validateNonNegative = (field: 'totalCombustivel', value: number) => {
     const ok = Number.isFinite(value) && value >= 0;
-    setError(field, ok ? '' : 'Não pode ser negativo');
+    if (!ok) setFormError(field, { type: 'manual', message: 'Não pode ser negativo' }); else clearErrors(field);
   };
 
   const validateOrder = () => {
@@ -161,34 +197,34 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
     const pouso = toMs(form.horarioPouso);
     const corte = toMs(form.horarioCorteMotores);
     if (partida && decolagem && partida > decolagem) {
-      setError('horarioPartida', 'Partida deve ser anterior ou igual à Decolagem');
-      setError('horarioDecolagem', 'Decolagem deve ser posterior ou igual à Partida');
+      setFormError('horarioPartida', { type: 'manual', message: 'Partida deve ser anterior ou igual à Decolagem' });
+      setFormError('horarioDecolagem', { type: 'manual', message: 'Decolagem deve ser posterior ou igual à Partida' });
     } else {
-      setError('horarioPartida', '');
-      setError('horarioDecolagem', '');
+      clearErrors('horarioPartida');
+      clearErrors('horarioDecolagem');
     }
     if (decolagem && pouso && decolagem > pouso) {
-      setError('horarioDecolagem', 'Decolagem deve ser anterior ou igual ao Pouso');
-      setError('horarioPouso', 'Pouso deve ser posterior ou igual à Decolagem');
+      setFormError('horarioDecolagem', { type: 'manual', message: 'Decolagem deve ser anterior ou igual ao Pouso' });
+      setFormError('horarioPouso', { type: 'manual', message: 'Pouso deve ser posterior ou igual à Decolagem' });
     } else {
-      if (!errors.horarioPartida) setError('horarioDecolagem', '');
-      setError('horarioPouso', '');
+      if (!formErrors.horarioPartida) clearErrors('horarioDecolagem');
+      clearErrors('horarioPouso');
     }
     if (pouso && corte && pouso > corte) {
-      setError('horarioPouso', 'Pouso deve ser anterior ou igual ao Corte');
-      setError('horarioCorteMotores', 'Corte deve ser posterior ou igual ao Pouso');
+      setFormError('horarioPouso', { type: 'manual', message: 'Pouso deve ser anterior ou igual ao Corte' });
+      setFormError('horarioCorteMotores', { type: 'manual', message: 'Corte deve ser posterior ou igual ao Pouso' });
     } else {
-      setError('horarioPouso', '');
-      setError('horarioCorteMotores', '');
+      clearErrors('horarioPouso');
+      clearErrors('horarioCorteMotores');
     }
     if (!pouso && partida && corte && partida > corte) {
-      setError('horarioPartida', 'Partida deve ser anterior ou igual ao Corte');
-      setError('horarioCorteMotores', 'Corte deve ser posterior ou igual à Partida');
+      setFormError('horarioPartida', { type: 'manual', message: 'Partida deve ser anterior ou igual ao Corte' });
+      setFormError('horarioCorteMotores', { type: 'manual', message: 'Corte deve ser posterior ou igual à Partida' });
     }
   };
   const timeOrderInvalid = React.useMemo(() => {
-    return !!(errors.horarioPartida || errors.horarioDecolagem || errors.horarioPouso || errors.horarioCorteMotores);
-  }, [errors]);
+    return !!(formErrors.horarioPartida || formErrors.horarioDecolagem || formErrors.horarioPouso || formErrors.horarioCorteMotores);
+  }, [formErrors]);
   const tempoPreview = React.useMemo(() => {
     const startIso = form.horarioDecolagem || form.horarioPartida;
     const endIso = form.horarioPouso || form.horarioCorteMotores;
@@ -221,16 +257,16 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
     return 'ANAC-DBE-' + Math.abs(hash).toString(16).toUpperCase();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async () => {
     if (!activeVolume) return alert("É necessário um volume aberto para registrar voos.");
     if (timeOrderInvalid) {
       alert("Ordem temporal inválida. Ajuste os horários de Partida/Decolagem/Pouso/Corte.");
       return;
     }
 
-    const startIso = form.horarioDecolagem || form.horarioPartida;
-    const endIso = form.horarioPouso || form.horarioCorteMotores;
+    const vals = getValues();
+    const startIso = vals.horarioDecolagem || vals.horarioPartida;
+    const endIso = vals.horarioPouso || vals.horarioCorteMotores;
     const departureDate = new Date(startIso);
     const arrivalDate = new Date(endIso);
     const diffMs = arrivalDate.getTime() - departureDate.getTime();
@@ -239,14 +275,14 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
     const tempoVooTotal = `${String(diffHrs).padStart(2, '0')}:${String(diffMins).padStart(2, '0')}`;
 
     const newLogData = {
-      ...form,
+      ...vals,
       volumeId: activeVolume.id,
       aeronautas: crew,
       tempoVooTotal,
       dataHorarioAssinaturaPiloto: new Date().toISOString(),
       dataHorarioAssinaturaOperador: new Date().toISOString(),
       isLocked: true,
-      hashIntegridade: generateHash({ ...form, crew, tempoVooTotal }),
+      hashIntegridade: generateHash({ ...vals, crew, tempoVooTotal }),
       blockTimeHours: diffMs / 3600000
     };
 
@@ -425,7 +461,7 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
         <div className={`badge ${actionMessage.type === 'error' ? 'badge-danger' : 'badge-success'}`}>{actionMessage.text}</div>
       )}
       {showForm && (
-        <form onSubmit={handleSubmit} className="card p-8 border-2 border-blue-50 animate-in fade-in slide-in-from-top-4 duration-300 space-y-8">
+        <form onSubmit={handleSubmit(onSubmit)} className="card p-8 border-2 border-blue-50 animate-in fade-in slide-in-from-top-4 duration-300 space-y-8">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-blue-800 text-sm">
             <div className="flex items-center gap-2 font-bold mb-2">
               <i className="fas fa-circle-info"></i>
@@ -442,7 +478,7 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-gray-500 mb-1">Natureza do Voo (Cód. ANAC)</label>
-                <select value={form.naturezaVoo} onChange={e => setForm({...form, naturezaVoo: e.target.value})} className="w-full p-2 border rounded-lg">
+                <select {...register('naturezaVoo')} value={form.naturezaVoo} onChange={e => setForm({...form, naturezaVoo: e.target.value})} className="w-full p-2 border rounded-lg">
                   {NATUREZA_VOO.map(n => <option key={n.id} value={n.id}>{n.id} - {n.label}</option>)}
                 </select>
               </div>
@@ -453,10 +489,12 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
                 </label>
                 <input
                   type="text"
+                  {...register('siglaAerodromoDecolagem')}
                   value={form.siglaAerodromoDecolagem}
                   onChange={e => {
                     const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
                     setForm({ ...form, siglaAerodromoDecolagem: v });
+                    setValue('siglaAerodromoDecolagem', v, { shouldValidate: true });
                     validateIcao('siglaAerodromoDecolagem', v);
                   }}
                   className="w-full p-2 border rounded-lg"
@@ -466,13 +504,13 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
                   title="ICAO deve ter 4 letras (A-Z)"
                 />
                 <div className="grid grid-cols-3 gap-2 mt-2">
-                  <input type="text" value={form.latitudeDecolagem} onChange={e => { setForm({...form, latitudeDecolagem: e.target.value}); validateCoord('latitudeDecolagem', e.target.value); }} className={`w-full p-2 border ${errors.latitudeDecolagem ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-23.55" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Latitude decimal, ex.: -23.55" />
-                  <input type="text" value={form.longitudeDecolagem} onChange={e => { setForm({...form, longitudeDecolagem: e.target.value}); validateCoord('longitudeDecolagem', e.target.value); }} className={`w-full p-2 border ${errors.longitudeDecolagem ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-46.63" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Longitude decimal, ex.: -46.63" />
-                  <input type="text" value={form.localDecolagem} onChange={e => setForm({...form, localDecolagem: e.target.value})} className="w-full p-2 border rounded-lg text-xs" placeholder="Local" />
+                  <input {...register('latitudeDecolagem')} type="text" value={form.latitudeDecolagem} onChange={e => { setForm({...form, latitudeDecolagem: e.target.value}); setValue('latitudeDecolagem', e.target.value, { shouldValidate: true }); validateCoord('latitudeDecolagem', e.target.value); }} className={`w-full p-2 border ${formErrors.latitudeDecolagem ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-23.55" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Latitude decimal, ex.: -23.55" />
+                  <input {...register('longitudeDecolagem')} type="text" value={form.longitudeDecolagem} onChange={e => { setForm({...form, longitudeDecolagem: e.target.value}); setValue('longitudeDecolagem', e.target.value, { shouldValidate: true }); validateCoord('longitudeDecolagem', e.target.value); }} className={`w-full p-2 border ${formErrors.longitudeDecolagem ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-46.63" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Longitude decimal, ex.: -46.63" />
+                  <input {...register('localDecolagem')} type="text" value={form.localDecolagem} onChange={e => { setForm({...form, localDecolagem: e.target.value}); setValue('localDecolagem', e.target.value); }} className="w-full p-2 border rounded-lg text-xs" placeholder="Local" />
                 </div>
-                {errors.siglaAerodromoDecolagem && <p className="text-[10px] text-red-600 mt-1">{errors.siglaAerodromoDecolagem}</p>}
-                {errors.latitudeDecolagem && <p className="text-[10px] text-red-600 mt-1">{errors.latitudeDecolagem}</p>}
-                {errors.longitudeDecolagem && <p className="text-[10px] text-red-600 mt-1">{errors.longitudeDecolagem}</p>}
+                {formErrors.siglaAerodromoDecolagem && <p className="text-[10px] text-red-600 mt-1">{formErrors.siglaAerodromoDecolagem.message as any}</p>}
+                {formErrors.latitudeDecolagem && <p className="text-[10px] text-red-600 mt-1">{formErrors.latitudeDecolagem.message as any}</p>}
+                {formErrors.longitudeDecolagem && <p className="text-[10px] text-red-600 mt-1">{formErrors.longitudeDecolagem.message as any}</p>}
                 <p className="text-[10px] text-slate-400 mt-1">Informe ICAO ou latitude+longitude ou um local.</p>
               </div>
               <div>
@@ -482,10 +520,12 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
                 </label>
                 <input
                   type="text"
+                  {...register('siglaAerodromoPouso')}
                   value={form.siglaAerodromoPouso}
                   onChange={e => {
                     const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
                     setForm({ ...form, siglaAerodromoPouso: v });
+                    setValue('siglaAerodromoPouso', v, { shouldValidate: true });
                     validateIcao('siglaAerodromoPouso', v);
                   }}
                   className="w-full p-2 border rounded-lg"
@@ -495,13 +535,13 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
                   title="ICAO deve ter 4 letras (A-Z)"
                 />
                 <div className="grid grid-cols-3 gap-2 mt-2">
-                  <input type="text" value={form.latitudePouso} onChange={e => { setForm({...form, latitudePouso: e.target.value}); validateCoord('latitudePouso', e.target.value); }} className={`w-full p-2 border ${errors.latitudePouso ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-23.55" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Latitude decimal, ex.: -23.55" />
-                  <input type="text" value={form.longitudePouso} onChange={e => { setForm({...form, longitudePouso: e.target.value}); validateCoord('longitudePouso', e.target.value); }} className={`w-full p-2 border ${errors.longitudePouso ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-46.63" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Longitude decimal, ex.: -46.63" />
-                  <input type="text" value={form.localPouso} onChange={e => setForm({...form, localPouso: e.target.value})} className="w-full p-2 border rounded-lg text-xs" placeholder="Local" />
+                  <input {...register('latitudePouso')} type="text" value={form.latitudePouso} onChange={e => { setForm({...form, latitudePouso: e.target.value}); setValue('latitudePouso', e.target.value, { shouldValidate: true }); validateCoord('latitudePouso', e.target.value); }} className={`w-full p-2 border ${formErrors.latitudePouso ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-23.55" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Latitude decimal, ex.: -23.55" />
+                  <input {...register('longitudePouso')} type="text" value={form.longitudePouso} onChange={e => { setForm({...form, longitudePouso: e.target.value}); setValue('longitudePouso', e.target.value, { shouldValidate: true }); validateCoord('longitudePouso', e.target.value); }} className={`w-full p-2 border ${formErrors.longitudePouso ? 'border-red-500' : ''} rounded-lg text-xs`} placeholder="-46.63" inputMode="decimal" pattern="^-?\\d{1,3}(\\.\\d+)?$" title="Longitude decimal, ex.: -46.63" />
+                  <input {...register('localPouso')} type="text" value={form.localPouso} onChange={e => { setForm({...form, localPouso: e.target.value}); setValue('localPouso', e.target.value); }} className="w-full p-2 border rounded-lg text-xs" placeholder="Local" />
                 </div>
-                {errors.siglaAerodromoPouso && <p className="text-[10px] text-red-600 mt-1">{errors.siglaAerodromoPouso}</p>}
-                {errors.latitudePouso && <p className="text-[10px] text-red-600 mt-1">{errors.latitudePouso}</p>}
-                {errors.longitudePouso && <p className="text-[10px] text-red-600 mt-1">{errors.longitudePouso}</p>}
+                {formErrors.siglaAerodromoPouso && <p className="text-[10px] text-red-600 mt-1">{formErrors.siglaAerodromoPouso.message as any}</p>}
+                {formErrors.latitudePouso && <p className="text-[10px] text-red-600 mt-1">{formErrors.latitudePouso.message as any}</p>}
+                {formErrors.longitudePouso && <p className="text-[10px] text-red-600 mt-1">{formErrors.longitudePouso.message as any}</p>}
                 <p className="text-[10px] text-slate-400 mt-1">Informe ICAO ou latitude+longitude ou um local.</p>
               </div>
             </div>
@@ -512,15 +552,17 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
                     type="number"
                     required
                     min={1}
+                    {...register('quantidadePessoasVoo')}
                     value={form.quantidadePessoasVoo}
                     onChange={e => {
                       const v = Number(e.target.value);
                       setForm({ ...form, quantidadePessoasVoo: v });
+                      setValue('quantidadePessoasVoo', v, { shouldValidate: true });
                       validatePositive('quantidadePessoasVoo', v);
                     }}
-                    className={`w-full p-2 border ${errors.quantidadePessoasVoo ? 'border-red-500' : ''} rounded-lg`}
+                    className={`w-full p-2 border ${formErrors.quantidadePessoasVoo ? 'border-red-500' : ''} rounded-lg`}
                   />
-                  {errors.quantidadePessoasVoo && <p className="text-[10px] text-red-600 mt-1">{errors.quantidadePessoasVoo}</p>}
+                  {formErrors.quantidadePessoasVoo && <p className="text-[10px] text-red-600 mt-1">{formErrors.quantidadePessoasVoo.message as any}</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1">Total de Combustível</label>
@@ -529,19 +571,21 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
                     required
                     min={0}
                     step="0.01"
+                    {...register('totalCombustivel')}
                     value={form.totalCombustivel}
                     onChange={e => {
                       const v = Number(e.target.value);
                       setForm({ ...form, totalCombustivel: v });
+                      setValue('totalCombustivel', v, { shouldValidate: true });
                       validateNonNegative('totalCombustivel', v);
                     }}
-                    className={`w-full p-2 border ${errors.totalCombustivel ? 'border-red-500' : ''} rounded-lg`}
+                    className={`w-full p-2 border ${formErrors.totalCombustivel ? 'border-red-500' : ''} rounded-lg`}
                   />
-                  {errors.totalCombustivel && <p className="text-[10px] text-red-600 mt-1">{errors.totalCombustivel}</p>}
+                  {formErrors.totalCombustivel && <p className="text-[10px] text-red-600 mt-1">{formErrors.totalCombustivel.message as any}</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1">Unidade</label>
-                <select required value={form.unidadeCombustivel} onChange={e => setForm({...form, unidadeCombustivel: e.target.value as 'L' | 'KG'})} className="w-full p-2 border rounded-lg">
+                <select {...register('unidadeCombustivel')} required value={form.unidadeCombustivel} onChange={e => setForm({...form, unidadeCombustivel: e.target.value as 'L' | 'KG'})} className="w-full p-2 border rounded-lg">
                   <option value="L">L</option>
                   <option value="KG">KG</option>
                 </select>
@@ -560,44 +604,48 @@ const FlightLogBook: React.FC<Props> = ({ logs, aircraft, activeVolume, onAddLog
                   <input
                     type="datetime-local"
                     required
+                    {...register('horarioPartida')}
                     value={form.horarioPartida}
-                    onChange={e => { setForm({ ...form, horarioPartida: e.target.value }); validateDateTime('horarioPartida', e.target.value); }}
-                    className={`w-full p-2 border ${errors.horarioPartida ? 'border-red-500' : ''} rounded-lg text-xs`}
+                    onChange={e => { setForm({ ...form, horarioPartida: e.target.value }); setValue('horarioPartida', e.target.value, { shouldValidate: true }); validateDateTime('horarioPartida', e.target.value); }}
+                    className={`w-full p-2 border ${formErrors.horarioPartida ? 'border-red-500' : ''} rounded-lg text-xs`}
                   />
-                  {errors.horarioPartida && <p className="text-[10px] text-red-600 mt-1">{errors.horarioPartida}</p>}
+                  {formErrors.horarioPartida && <p className="text-[10px] text-red-600 mt-1">{formErrors.horarioPartida.message as any}</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1">Decolagem</label>
                   <input
                     type="datetime-local"
+                    {...register('horarioDecolagem')}
                     required={form.numeroPousoEtapa > 0}
                     value={form.horarioDecolagem}
-                    onChange={e => { setForm({ ...form, horarioDecolagem: e.target.value }); validateDateTime('horarioDecolagem', e.target.value); }}
-                    className={`w-full p-2 border ${errors.horarioDecolagem ? 'border-red-500' : ''} rounded-lg text-xs`}
+                    onChange={e => { setForm({ ...form, horarioDecolagem: e.target.value }); setValue('horarioDecolagem', e.target.value, { shouldValidate: true }); validateDateTime('horarioDecolagem', e.target.value); }}
+                    className={`w-full p-2 border ${formErrors.horarioDecolagem ? 'border-red-500' : ''} rounded-lg text-xs`}
                   />
-                  {errors.horarioDecolagem && <p className="text-[10px] text-red-600 mt-1">{errors.horarioDecolagem}</p>}
+                  {formErrors.horarioDecolagem && <p className="text-[10px] text-red-600 mt-1">{formErrors.horarioDecolagem.message as any}</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1">Pouso</label>
                   <input
                     type="datetime-local"
+                    {...register('horarioPouso')}
                     required={form.numeroPousoEtapa > 0}
                     value={form.horarioPouso}
-                    onChange={e => { setForm({ ...form, horarioPouso: e.target.value }); validateDateTime('horarioPouso', e.target.value); }}
-                    className={`w-full p-2 border ${errors.horarioPouso ? 'border-red-500' : ''} rounded-lg text-xs`}
+                    onChange={e => { setForm({ ...form, horarioPouso: e.target.value }); setValue('horarioPouso', e.target.value, { shouldValidate: true }); validateDateTime('horarioPouso', e.target.value); }}
+                    className={`w-full p-2 border ${formErrors.horarioPouso ? 'border-red-500' : ''} rounded-lg text-xs`}
                   />
-                  {errors.horarioPouso && <p className="text-[10px] text-red-600 mt-1">{errors.horarioPouso}</p>}
+                  {formErrors.horarioPouso && <p className="text-[10px] text-red-600 mt-1">{formErrors.horarioPouso.message as any}</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1">Corte</label>
                   <input
                     type="datetime-local"
                     required
+                    {...register('horarioCorteMotores')}
                     value={form.horarioCorteMotores}
-                    onChange={e => { setForm({ ...form, horarioCorteMotores: e.target.value }); validateDateTime('horarioCorteMotores', e.target.value); }}
-                    className={`w-full p-2 border ${errors.horarioCorteMotores ? 'border-red-500' : ''} rounded-lg text-xs`}
+                    onChange={e => { setForm({ ...form, horarioCorteMotores: e.target.value }); setValue('horarioCorteMotores', e.target.value, { shouldValidate: true }); validateDateTime('horarioCorteMotores', e.target.value); }}
+                    className={`w-full p-2 border ${formErrors.horarioCorteMotores ? 'border-red-500' : ''} rounded-lg text-xs`}
                   />
-                  {errors.horarioCorteMotores && <p className="text-[10px] text-red-600 mt-1">{errors.horarioCorteMotores}</p>}
+                  {formErrors.horarioCorteMotores && <p className="text-[10px] text-red-600 mt-1">{formErrors.horarioCorteMotores.message as any}</p>}
               </div>
             </div>
             <div className="mt-3 flex items-center gap-3">

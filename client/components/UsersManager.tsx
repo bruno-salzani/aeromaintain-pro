@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '@/types';
+import { useForm } from 'react-hook-form';
 
 interface Props {
   users: User[];
@@ -14,30 +15,29 @@ const ROLES: UserRole[] = ['ADMIN', 'OPERADOR', 'MANUTENCAO', 'VISUALIZADOR'];
 const UsersManager: React.FC<Props> = ({ users, onAdd, onUpdate, onDelete, onClose }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<User, 'id'>>({
-    nome: '',
-    email: '',
-    role: 'OPERADOR',
-    ativo: true
+  const { register, handleSubmit, reset, getValues, watch, formState: { errors } } = useForm<Omit<User, 'id'>>({
+    defaultValues: { nome: '', email: '', role: 'OPERADOR', ativo: true }
   });
+  const form = watch();
 
   const startEdit = (u: User) => {
     setEditingId(u.id);
-    setForm({ nome: u.nome, email: u.email, role: u.role, ativo: u.ativo });
+    reset({ nome: u.nome, email: u.email, role: u.role, ativo: u.ativo });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    const data = getValues();
     if (editingId) {
-      onUpdate(editingId, form);
+      onUpdate(editingId, data);
     } else {
-      onAdd(form);
+      onAdd(data);
     }
     setEditingId(null);
     setShowForm(false);
-    setForm({ nome: '', email: '', role: 'OPERADOR', ativo: true });
+    reset({ nome: '', email: '', role: 'OPERADOR', ativo: true });
   };
 
   return (
@@ -58,20 +58,22 @@ const UsersManager: React.FC<Props> = ({ users, onAdd, onUpdate, onDelete, onClo
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase">Nome</label>
-                <input className="w-full p-2 border rounded-lg text-sm bg-white" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} required />
+                <input className="w-full p-2 border rounded-lg text-sm bg-white" {...register('nome', { required: true })} />
+                {errors.nome && <span className="text-xs text-red-600">Nome é obrigatório</span>}
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase">E-mail</label>
-                <input type="email" className="w-full p-2 border rounded-lg text-sm bg-white" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
+                <input type="email" className="w-full p-2 border rounded-lg text-sm bg-white" {...register('email', { required: true, pattern: /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/ })} />
+                {errors.email && <span className="text-xs text-red-600">E-mail inválido</span>}
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase">Perfil</label>
-                <select className="w-full p-2 border rounded-lg text-sm bg-white" value={form.role} onChange={e => setForm({ ...form, role: e.target.value as UserRole })}>
+                <select className="w-full p-2 border rounded-lg text-sm bg-white" {...register('role')}>
                   {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <input id="ativo" type="checkbox" checked={form.ativo} onChange={e => setForm({ ...form, ativo: e.target.checked })} />
+                <input id="ativo" type="checkbox" {...register('ativo')} />
                 <label htmlFor="ativo" className="text-sm">Ativo</label>
               </div>
             </div>

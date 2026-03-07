@@ -12,24 +12,32 @@ import ComponentsPage from '@/pages/ComponentsPage';
 import CompliancePage from '@/pages/CompliancePage';
 import StatusPage from '@/pages/StatusPage';
 import LoginPage from '@/pages/LoginPage';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 export default function App() {
+  const [client] = React.useState(() => new QueryClient());
   return (
-    <AppDomainProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/volumes" element={<VolumesPage />} />
-            <Route path="/flightlog" element={<FlightLogPage />} />
-            <Route path="/maintenance" element={<MaintenancePage />} />
-            <Route path="/components" element={<ComponentsPage />} />
-            <Route path="/compliance" element={<CompliancePage />} />
-            <Route path="/status" element={<StatusPage />} />
+    <QueryClientProvider client={client}>
+      <AppDomainProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<MainLayout />}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/volumes" element={<VolumesPage />} />
+              <Route path="/flightlog" element={<FlightLogPage />} />
+              <Route element={<ProtectedRoute roles={['MANUTENCAO','ADMIN']} />}>
+                <Route path="/maintenance" element={<MaintenancePage />} />
+              </Route>
+              <Route path="/components" element={<ComponentsPage />} />
+              <Route element={<ProtectedRoute roles={['ADMIN']} />}>
+                <Route path="/compliance" element={<CompliancePage />} />
+              </Route>
+              <Route path="/status" element={<StatusPage />} />
+            </Route>
           </Route>
-        </Route>
-      </Routes>
-    </AppDomainProvider>
+        </Routes>
+      </AppDomainProvider>
+    </QueryClientProvider>
   );
 }
