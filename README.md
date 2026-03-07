@@ -1,4 +1,4 @@
-# AeroMaintain Pro ✈️
+# 03/2026 - AeroMaintain Pro (React + Node.js + Clean Architecture)
 
 **Sistema Integrado de Gestão de Manutenção Aeronáutica e Diário de Bordo Digital**
 
