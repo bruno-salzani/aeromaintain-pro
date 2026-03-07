@@ -48,7 +48,8 @@ export async function registerFlight(input, deps) {
     isLocked: true,
     hashIntegridade: generateHash({ ...input, tempoVooTotal }),
     blockTimeHours,
-    civClassification: civ || undefined
+    civClassification: civ || undefined,
+    syncStatus: 'PENDING'
   });
   const anacPayload = {
     idDiarioBordoVolume: vol.anacVolumeId || undefined,
@@ -83,13 +84,26 @@ export async function registerFlight(input, deps) {
     dataHorarioAssinaturaPiloto: input.dataHorarioAssinaturaPiloto || undefined,
     dataHorarioAssinaturaOperador: input.dataHorarioAssinaturaOperador || undefined
   };
-  const etapaId = await deps.anacGateway.postFlight(anacPayload);
-  if (etapaId) {
+  
+  try {
+    const etapaId = await deps.anacGateway.postFlight(anacPayload);
+    if (etapaId) {
+      const saved = await deps.flightLogRepo.findById(created._id);
+      saved.anacEtapaId = etapaId;
+      saved.anacOperatorId = anacPayload.idDiarioBordoOperador || '';
+      saved.syncStatus = 'SYNCED';
+      await deps.flightLogRepo.save(saved);
+    }
+  } catch (err) {
+    // Fail-safe: Log error but don't break the flight registration flow.
+    // The background worker will pick up PENDING logs later.
     const saved = await deps.flightLogRepo.findById(created._id);
-    saved.anacEtapaId = etapaId;
-    saved.anacOperatorId = anacPayload.idDiarioBordoOperador || '';
+    saved.syncStatus = 'ERROR';
+    saved.syncError = err.message;
     await deps.flightLogRepo.save(saved);
+    // TODO: Trigger alerting or add to dead-letter queue
   }
+
   const aircraft = await deps.aircraftRepo.findOne();
   await deps.updateMaintenanceByFlightStage({ blockTimeHours, numeroCicloEtapa: input.numeroCicloEtapa || 0 }, deps);
   return created;

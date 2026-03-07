@@ -10,6 +10,63 @@ import { requireAdminApiKey } from '../infra/http/auth.js';
 
 export const router = Router();
 
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Aircraft:
+ *       type: object
+ *       required:
+ *         - registration
+ *         - model
+ *       properties:
+ *         id:
+ *           type: string
+ *           description: The auto-generated id of the aircraft
+ *         registration:
+ *           type: string
+ *           description: The aircraft registration number
+ *         model:
+ *           type: string
+ *           description: The aircraft model
+ *         manufactureYear:
+ *           type: number
+ *           description: Year of manufacture
+ *         totalHours:
+ *           type: number
+ *           description: Total flight hours
+ *         totalCycles:
+ *           type: number
+ *           description: Total flight cycles
+ *         status:
+ *           type: string
+ *           enum: [ATIVO, PARADO, MANUTENCAO]
+ *           description: The aircraft status
+ */
+
+/**
+ * @swagger
+ * tags:
+ *   name: Aircraft
+ *   description: Aircraft management API
+ */
+
+/**
+ * @swagger
+ * /aircraft:
+ *   get:
+ *     summary: Get aircraft details
+ *     tags: [Aircraft]
+ *     responses:
+ *       200:
+ *         description: The aircraft description
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Aircraft'
+ *       503:
+ *         description: Database unavailable
+ */
 router.get('/', (req, res) => {
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({ error: 'database unavailable' });

@@ -2,9 +2,15 @@ import { config } from '../config.js';
 import pino from 'pino';
 import { recordAnac } from './metricsService.js';
 import crypto from 'crypto';
+import { withRetry, CircuitBreaker } from '../utils/resilience.js';
+
+import { getRedis } from '../db/redis.js';
 
 const logger = pino();
-let cachedToken = { token: '', expiresAt: 0 };
+const REDIS_KEY_ANAC_TOKEN = 'anac:token';
+
+const anacCircuit = new CircuitBreaker('ANAC-SSO', { failureThreshold: 3, resetTimeout: 60000 });
+const apiCircuit = new CircuitBreaker('ANAC-API', { failureThreshold: 5, resetTimeout: 30000 });
 
 function formatDateBR(iso) {
   if (!iso) return '';
@@ -35,37 +41,48 @@ function makeIdempotencyKey(prefix, parts) {
 }
 
 export async function getAccessToken() {
-  if (cachedToken.token && Date.now() < cachedToken.expiresAt - 60_000) return cachedToken.token;
-  const url = config.anacSsoTokenUrl;
-  const body = new URLSearchParams();
-  body.set('client_id', config.anacClientId || 'client-api-diariodebordo');
-  body.set('username', config.anacUsername || '');
-  body.set('password', config.anacPassword || '');
-  body.set('grant_type', 'password');
-  let lastErr = '';
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const start = Date.now();
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body
-    });
-    if (res.ok) {
+  const redis = getRedis();
+  if (redis) {
+    const cached = await redis.get(REDIS_KEY_ANAC_TOKEN);
+    if (cached) return cached;
+  }
+
+  return withRetry(async () => {
+    return anacCircuit.execute(async () => {
+      const url = config.anacSsoTokenUrl;
+      const body = new URLSearchParams();
+      body.set('client_id', config.anacClientId || 'client-api-diariodebordo');
+      body.set('username', config.anacUsername || '');
+      body.set('password', config.anacPassword || '');
+      body.set('grant_type', 'password');
+
+      const start = Date.now();
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        recordAnac('getAccessToken', false, Date.now() - start);
+        throw new Error(`ANAC SSO error: ${res.status} ${text}`);
+      }
+
       const json = await res.json().catch(async () => ({ raw: await res.text() }));
       const token = json.access_token;
       const expiresIn = Number(json.expires_in || 1800);
-      cachedToken = { token, expiresAt: Date.now() + expiresIn * 1000 };
-      logger.info({ op: 'getAccessToken', attempt: attempt + 1, durationMs: Date.now() - start }, 'ANAC SSO token obtained');
+      
+      if (redis) {
+        // Cache for 60s less than expiry to avoid race conditions
+        await redis.set(REDIS_KEY_ANAC_TOKEN, token, 'EX', Math.max(expiresIn - 60, 60));
+      }
+      
+      logger.info({ op: 'getAccessToken', durationMs: Date.now() - start }, 'ANAC SSO token obtained');
       recordAnac('getAccessToken', true, Date.now() - start);
       return token;
-    }
-    const text = await res.text().catch(() => '');
-    lastErr = `ANAC SSO error: ${res.status} ${text}`;
-    logger.warn({ op: 'getAccessToken', attempt: attempt + 1, durationMs: Date.now() - start, status: res.status }, 'ANAC SSO attempt failed');
-    recordAnac('getAccessToken', false, Date.now() - start);
-    await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
-  }
-  throw new Error(lastErr || 'ANAC SSO error');
+    });
+  }, { retries: 3, operationName: 'getAccessToken' });
 }
 
 export async function openVolumeOnAnac(payload) {
@@ -83,9 +100,9 @@ export async function openVolumeOnAnac(payload) {
     horasVooMotor: payload.horasVooMotor || undefined,
     ciclosMotor: payload.ciclosMotor || undefined
   };
-  let lastErr = '';
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
+
+  return withRetry(async () => {
+    return apiCircuit.execute(async () => {
       const token = await getAccessToken();
       const start = Date.now();
       const res = await fetch(url, {
@@ -97,33 +114,29 @@ export async function openVolumeOnAnac(payload) {
         },
         body: JSON.stringify(body)
       });
-      if (res.ok) {
-        const duration = Date.now() - start;
-        let ids = {};
-        try {
-          ids = await res.json();
-        } catch {
-          const text = await res.text().catch(() => '');
-          logger.warn('ANAC Volume response not JSON, raw text saved');
-          ids = { raw: text };
-        }
-        const volId = ids.idDiarioBordoVolume || ids.Volume?.idDiarioBordoVolume || ids.id || null;
-        const opIds = ids.idDiarioBordoOperador ? [ids.idDiarioBordoOperador] : ids.Operadores || [];
-        logger.info({ op: 'openVolume', attempt: attempt + 1, durationMs: duration, volId, opIds }, 'ANAC volume opened');
-        recordAnac('openVolume', true, duration);
-        return { volId, opIds, requestBody: body };
+
+      if (!res.ok) {
+        const textErr = await res.text().catch(() => '');
+        recordAnac('openVolume', false, Date.now() - start);
+        throw new Error(`ANAC Volume error: ${res.status} ${textErr}`);
       }
-      const textErr = await res.text().catch(() => '');
-      lastErr = `ANAC Volume error: ${res.status} ${textErr}`;
-      logger.warn({ op: 'openVolume', attempt: attempt + 1, durationMs: Date.now() - start, status: res.status }, 'ANAC volume attempt failed');
-      recordAnac('openVolume', false, Date.now() - start);
-    } catch (e) {
-      lastErr = (e && e.message) || 'ANAC Volume error';
-      logger.warn({ op: 'openVolume', attempt: attempt + 1 }, 'ANAC volume network error');
-    }
-    await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
-  }
-  throw new Error(lastErr || 'ANAC Volume error');
+
+      const duration = Date.now() - start;
+      let ids = {};
+      try {
+        ids = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        logger.warn('ANAC Volume response not JSON, raw text saved');
+        ids = { raw: text };
+      }
+      const volId = ids.idDiarioBordoVolume || ids.Volume?.idDiarioBordoVolume || ids.id || null;
+      const opIds = ids.idDiarioBordoOperador ? [ids.idDiarioBordoOperador] : ids.Operadores || [];
+      logger.info({ op: 'openVolume', durationMs: duration, volId, opIds }, 'ANAC volume opened');
+      recordAnac('openVolume', true, duration);
+      return { volId, opIds, requestBody: body };
+    });
+  }, { retries: 3, operationName: 'openVolume' });
 }
 
 export async function closeVolumeOnAnac(volId) {
@@ -161,9 +174,9 @@ export async function closeVolumeOnAnac(volId) {
 
 export async function postFlightOnAnac(payload) {
   const url = `${config.anacApiBaseUrl}/DiarioDeBordo/EtapaVoo`;
-  let lastErr = '';
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
+
+  return withRetry(async () => {
+    return apiCircuit.execute(async () => {
       const token = await getAccessToken();
       const start = Date.now();
       const res = await fetch(url, {
@@ -176,26 +189,21 @@ export async function postFlightOnAnac(payload) {
         },
         body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        const duration = Date.now() - start;
-        const json = await res.json().catch(async () => ({ raw: await res.text() }));
-        const etapaId = json.idEtapaVoo || json.id || null;
-        logger.info({ op: 'postFlight', attempt: attempt + 1, durationMs: duration, etapaId }, 'ANAC etapa criada');
-        recordAnac('postFlight', true, duration);
-        return etapaId;
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        recordAnac('postFlight', false, Date.now() - start);
+        throw new Error(`ANAC Flight error: ${res.status} ${txt}`);
       }
-      const txt = await res.text().catch(() => '');
-      lastErr = `ANAC Flight error: ${res.status} ${txt}`;
-      logger.warn({ op: 'postFlight', attempt: attempt + 1, durationMs: Date.now() - start, status: res.status }, 'ANAC etapa tentativa falhou');
-      recordAnac('postFlight', false, Date.now() - start);
-    } catch (e) {
-      lastErr = (e && e.message) || 'ANAC Flight error';
-      logger.warn({ op: 'postFlight', attempt: attempt + 1 }, 'ANAC etapa network error');
-    }
-    await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
-  }
-  logger.warn({ err: lastErr }, 'postFlightOnAnac failed after retries');
-  return null;
+
+      const duration = Date.now() - start;
+      const json = await res.json().catch(async () => ({ raw: await res.text() }));
+      const etapaId = json.idEtapaVoo || json.id || null;
+      logger.info({ op: 'postFlight', durationMs: duration, etapaId }, 'ANAC etapa criada');
+      recordAnac('postFlight', true, duration);
+      return etapaId;
+    });
+  }, { retries: 3, operationName: 'postFlight' });
 }
 
 export async function updateFlightOnAnac(etapaId, operatorId, payload) {

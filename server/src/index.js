@@ -26,6 +26,8 @@ import { verifyAuditChain } from './services/auditService.js';
 import { AuditLog } from './models/auditLog.js';
 import { recordAuditCheck, getAnacMetrics, getAuditMetrics } from './services/metricsService.js';
 import mongoose from 'mongoose';
+import swaggerUi from 'swagger-ui-express';
+import { specs } from './swagger.js';
 
 dotenv.config();
 
@@ -56,6 +58,9 @@ app.use(cors({ origin: (origin, cb) => {
 }, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(auditLogger);
+
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
 if (process.env.CSRF_ENABLED === '1') {
   const secure = process.env.NODE_ENV === 'production';

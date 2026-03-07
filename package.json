@@ -9,6 +9,13 @@
   "scripts": {
     "ci": "powershell -ExecutionPolicy Bypass -File .\\ci.ps1",
     "ci:server": "cd server && npm run ci -s",
-    "ci:client": "cd client && npm run ci -s"
+    "ci:client": "cd client && npm run ci -s",
+    "lint": "cd client && npm run lint && cd ../server && npm run lint",
+    "test": "cd client && npm run test && cd ../server && npm run test",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.2"
   }
 }

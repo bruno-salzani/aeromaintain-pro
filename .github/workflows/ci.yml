@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+
+    - name: Install Root Dependencies
+      run: npm install
+
+    - name: Install Client Dependencies
+      working-directory: ./client
+      run: npm ci
+
+    - name: Install Server Dependencies
+      working-directory: ./server
+      run: npm ci
+
+    - name: Lint Client
+      working-directory: ./client
+      run: npm run lint
+
+    - name: Lint Server
+      working-directory: ./server
+      run: npm run lint
+
+    - name: Test Client
+      working-directory: ./client
+      run: npm run test
+
+    - name: Test Server
+      working-directory: ./server
+      run: npm run test
+
+    # E2E tests would require running the server and client, which is more complex in CI.
+    # We'll skip E2E for now in this basic workflow, or add it later if needed.

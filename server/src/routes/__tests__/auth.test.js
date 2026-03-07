@@ -10,8 +10,15 @@ vi.mock('../../models/user.js', () => ({
   }
 }));
 
-import * as authService from '../../services/authService.js';
+vi.mock('../../services/authService.js', () => ({
+  verifyPassword: vi.fn(),
+  hashPassword: vi.fn(),
+  createResetToken: vi.fn(),
+  consumeResetToken: vi.fn()
+}));
+
 const { User } = await import('../../models/user.js');
+import { verifyPassword, hashPassword, createResetToken, consumeResetToken } from '../../services/authService.js';
 
 describe('Auth routes', () => {
   beforeEach(() => {
@@ -25,7 +32,7 @@ describe('Auth routes', () => {
     app.use(express.json());
     app.use('/api/auth', authRouter);
     User.findOne.mockResolvedValue({ email: 'u@test.com', passwordHash: 'h', passwordSalt: 's' });
-    vi.spyOn(authService, 'verifyPassword').mockReturnValue(true);
+    verifyPassword.mockResolvedValue(true);
     const res = await request(app).post('/api/auth/login').send({ email: 'u@test.com', password: '123456', rememberMe: true, recaptchaToken: 't' });
     expect(res.status).toBe(200);
     expect(res.headers['set-cookie']).toBeDefined();
@@ -37,7 +44,7 @@ describe('Auth routes', () => {
     app.use(express.json());
     app.use('/api/auth', authRouter);
     User.findOne.mockResolvedValue({ id: 'u1', email: 'u@test.com', cpf: '12345678900' });
-    vi.spyOn(authService, 'createResetToken').mockResolvedValue({ token: 'reset123', expires: new Date(Date.now() + 1000) });
+    createResetToken.mockResolvedValue({ token: 'reset123', expires: new Date(Date.now() + 1000) });
     const res = await request(app).post('/api/auth/request-reset').send({ email: 'u@test.com', cpf: '123.456.789-00', recaptchaToken: 't' });
     expect(res.status).toBe(200);
     expect(res.body.resetLink).toContain('reset-password?token=reset123');
@@ -49,8 +56,8 @@ describe('Auth routes', () => {
     app.use(express.json());
     app.use('/api/auth', authRouter);
     const save = vi.fn();
-    vi.spyOn(authService, 'consumeResetToken').mockResolvedValue({ save });
-    vi.spyOn(authService, 'hashPassword').mockReturnValue({ hash: 'nh', salt: 'ns' });
+    consumeResetToken.mockResolvedValue({ save });
+    hashPassword.mockResolvedValue({ hash: 'nh', salt: 'ns' });
     const res = await request(app).post('/api/auth/reset').send({ token: 'abc', newPassword: '123456' });
     expect(res.status).toBe(200);
     expect(save).toHaveBeenCalled();

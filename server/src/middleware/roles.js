@@ -1,7 +1,7 @@
 export function requireRole(allowed) {
-  const enabled = process.env.ROLES_ENFORCED === '1';
   const set = new Set(Array.isArray(allowed) ? allowed : [allowed]);
   return (req, res, next) => {
+    const enabled = process.env.ROLES_ENFORCED === '1';
     if (!enabled) return next();
     const role = (req.headers['x-role'] || '').toString().toUpperCase();
     const adminKey = process.env.ADMIN_API_KEY || '';

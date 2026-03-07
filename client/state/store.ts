@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Aircraft, FlightLog, Volume, UserRole } from '@/types';
 import { INITIAL_AIRCRAFT } from '@/constants';
+import { AircraftDomain } from '../src/domain/AircraftDomain';
 
 type Store = {
   isAuthenticated: boolean;
@@ -34,28 +35,28 @@ export const useAppStore = create<Store>()(
   addLog: (payload) => {
     const id = Math.random().toString(36).substr(2, 9);
     const log = { ...payload, id } as FlightLog;
-    const blockTime = (payload as any).blockTimeHours || 0;
     const current = get().aircraft;
+    
+    // Domain Logic delegation
+    const updatedAircraft = AircraftDomain.applyFlightLog(current, log);
+
     set({
       logs: [log, ...get().logs],
-      aircraft: {
-        ...current,
-        totalHours: current.totalHours + blockTime,
-        totalCycles: current.totalCycles + log.numeroCicloEtapa
-      }
+      aircraft: updatedAircraft
     });
   },
   deleteLog: (id) => {
     const found = get().logs.find(l => l.id === id);
-    const blockTime = (found as any)?.blockTimeHours || 0;
+    if (!found) return;
+
     const current = get().aircraft;
+    
+    // Domain Logic delegation
+    const updatedAircraft = AircraftDomain.revertFlightLog(current, found);
+
     set({
       logs: get().logs.filter(l => l.id !== id),
-      aircraft: {
-        ...current,
-        totalHours: Math.max(0, current.totalHours - blockTime),
-        totalCycles: Math.max(0, current.totalCycles - (found?.numeroCicloEtapa || 0))
-      }
+      aircraft: updatedAircraft
     });
   },
   volumes: [],

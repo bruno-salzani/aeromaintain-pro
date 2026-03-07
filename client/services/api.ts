@@ -11,6 +11,12 @@ function readCookie(name: string): string | null {
 async function request(path: string, init: RequestInit & { schema?: z.ZodTypeAny; retry?: number } = {}) {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string> || {}), 'Content-Type': 'application/json' };
   if (API_KEY) headers['x-api-key'] = API_KEY;
+  
+  // Distributed Tracing: Propagate Request ID
+  if (!headers['x-request-id']) {
+    headers['x-request-id'] = crypto.randomUUID();
+  }
+
   const method = (init.method || 'GET').toUpperCase();
   if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
     const csrf = readCookie('XSRF-TOKEN');

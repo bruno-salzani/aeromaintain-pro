@@ -75,6 +75,9 @@ export interface FlightLog {
   dataHorarioAssinaturaOperador?: string;
   isLocked: boolean; // ANAC: Imutabilidade após assinatura
   hashIntegridade?: string; // SHA-256 simulado
+  blockTimeHours?: number;
+  syncStatus?: 'PENDING' | 'SYNCED' | 'ERROR';
+  syncError?: string;
   civClassification?: { code: string; notes?: string };
   corrections?: Array<{ field: string; oldValue: any; newValue: any; justification: string; operatorId: string; timestamp: string }>;
 }

@@ -11,6 +11,10 @@ vi.mock('../../services/componentService.js', () => ({
   deleteComponent: vi.fn(async () => true)
 }));
 
+vi.mock('../../services/auditService.js', () => ({
+  addAuditLog: vi.fn()
+}));
+
 describe('RBAC Componentes', () => {
   beforeEach(() => {
     vi.clearAllMocks();

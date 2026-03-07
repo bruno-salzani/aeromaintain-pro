@@ -18,6 +18,43 @@ Este projeto demonstra competências avançadas em desenvolvimento de software, 
 
 ---
 
+## 🏛️ Arquitetura de Software
+
+Este projeto segue os princípios de **Clean Architecture** e **Resiliência Distribuída**.
+
+### C4 Model: Container Diagram
+
+```mermaid
+C4Container
+    title Container Diagram for AeroMaintain Pro
+
+    Person(pilot, "Piloto/Mecânico", "Usuário do sistema")
+    
+    Container_Boundary(c1, "AeroMaintain Pro") {
+        Container(web_app, "Single Page Application", "React, TypeScript", "Interface do usuário para gestão de voos e manutenção")
+        Container(api, "API Server", "Node.js, Express", "Lógica de negócios, autenticação e integração com ANAC")
+        ContainerDb(database, "Database", "MongoDB", "Armazena dados de voos, componentes e logs de auditoria")
+        ContainerDb(cache, "Cache", "Redis", "Cache de tokens ANAC e Rate Limiting")
+    }
+
+    System_Ext(anac, "ANAC Digital", "API Governamental para registro de diário de bordo")
+
+    Rel(pilot, web_app, "Usa", "HTTPS")
+    Rel(web_app, api, "Chama API", "JSON/HTTPS")
+    Rel(api, database, "Lê/Escreve", "Mongoose")
+    Rel(api, cache, "Cache/Lock", "Redis Protocol")
+    Rel(api, anac, "Envia dados", "HTTPS/REST")
+```
+
+### Padrões de Resiliência Implementados
+
+*   **Circuit Breaker**: Protege o sistema contra falhas em cascata da API da ANAC. Se a API externa falhar repetidamente, o circuito "abre" e falha rápido, permitindo recuperação.
+*   **Retry with Exponential Backoff & Jitter**: Tentativas de reconexão inteligentes que evitam o "Thundering Herd Problem".
+*   **Distributed Caching**: Tokens de autenticação da ANAC são cacheados no Redis para suportar múltiplas instâncias do servidor (Horizontal Scaling).
+*   **Fail-Safe Sync**: Se a sincronização com a ANAC falhar, o voo é salvo localmente com status `PENDING` para reprocessamento posterior (Pattern: *Guaranteed Delivery*).
+
+---
+
 ## 🛠️ Tech Stack
 
 ### Back-end
@@ -71,25 +108,53 @@ Este projeto demonstra competências avançadas em desenvolvimento de software, 
 ### Instalação Rápida
 
 1.  **Clone o repositório**
+    ```bash
+    git clone https://github.com/usuario/aeromaintain-pro.git
+    cd aeromaintain-pro
+    ```
+
 2.  **Inicie a infraestrutura (MongoDB/Redis)**
     ```bash
     docker compose -f server/docker-compose.yml up -d
     ```
-3.  **Inicie o Servidor**
+
+3.  **Setup e Testes**
+    Execute o script de CI para instalar dependências, rodar linter e testes unitários.
+    ```bash
+    npm install
+    npm run ci
+    ```
+
+4.  **Inicie o Servidor**
     Configure o arquivo `.env` na pasta `server` (use `.env.example` como base).
     ```bash
     cd server
-    npm install
     npm run seed # Popula o banco com dados iniciais e usuário admin
     npm run dev
     ```
-4.  **Inicie o Cliente**
+
+5.  **Inicie o Cliente**
+    Em outro terminal:
     ```bash
     cd client
-    npm install
     npm run dev
     ```
-5.  Acesse a aplicação: `http://localhost:5173`
+
+6.  Acesse a aplicação: `http://localhost:5173`
+    *   **Login Admin**: `admin@aeromaintain.com` / `admin123` (se usar seed)
+
+---
+
+## 🧪 Testes e Qualidade
+
+O projeto possui uma suíte de testes abrangente:
+
+*   **Unitários e Integração**: Vitest (Backend e Frontend).
+    *   Rodar todos: `npm run test` na raiz.
+*   **End-to-End (E2E)**: Playwright.
+    *   Rodar: `cd e2e && npx playwright test`
+*   **Linting**: ESLint configurado para garantir padrões de código.
+    *   Rodar: `npm run lint`
 
 ---
 
@@ -98,6 +163,15 @@ Este projeto demonstra competências avançadas em desenvolvimento de software, 
 *   **Autenticação**: Suporte a login seguro, reset de senha e proteção por reCAPTCHA.
 *   **Dados Sensíveis**: Gerenciamento estrito via variáveis de ambiente (`.env`).
 *   **Proteção de API**: Middlewares para validação de API Keys, escopos de acesso e sanitização de dados.
+*   **Observabilidade**: Logs estruturados com `pino` e rastreamento distribuído via `x-request-id`.
+
+## 📄 Documentação da API
+
+A documentação completa da API está disponível via Swagger UI.
+Após iniciar o servidor, acesse:
+`http://localhost:4000/api-docs`
+
+---
 *   **Deploy**: Configurações prontas para produção (Cookies Secure, Allowed Origins, etc).
 
 ---

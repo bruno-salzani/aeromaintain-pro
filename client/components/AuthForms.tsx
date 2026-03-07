@@ -28,11 +28,12 @@ const AuthForms: React.FC<Props> = ({ onAuthenticated }) => {
     setLoading(true);
     setError(null);
     try {
+      if (!email || !password) throw new Error('Preencha todos os campos');
       await login(email, password, remember);
       if (remember) localStorage.setItem('remember_email', email);
       onAuthenticated();
     } catch (e: any) {
-      setError('Falha no login');
+      setError(e.message || 'Falha no login');
     } finally {
       setLoading(false);
     }
